@@ -9,6 +9,8 @@ data Nat : Set where
   Zero : Nat
   Succ : Nat -> Nat
 
+data Absurd : Set where -- logical falsity
+
 data _==_ {X : Set} (x : X) : X -> Set where
   Refl : x == x
 
@@ -160,7 +162,7 @@ eval (K n) x = n
 eval I x = x
 eval (Shift p) x = eval p (Succ x)
 eval (p ⊕ q) x = eval p x + eval p x
-eval (Times p q _) x = eval p x × eval p x
+eval (Times p q _) x = eval p x × eval q x
 
  -- not very interesting
 sul : {l m n : Nat} -> Add l m n -> Add (Succ l) m (Succ n)
@@ -226,9 +228,8 @@ testEq Zero p r = Unit -- constant, so only test at, say, zero
 testEq (Succ k) p r = (eval p 0 == eval r 0) , testEq k (Shift p) (Shift r)
 -- k: number tests to perform
 
---testLem : (n : Nat) (p r : Poly n) ->
---  testEq (Succ n) p r -> (x : Nat) -> eval p x == eval r x
---testLem = {!!}
+testLem : (n : Nat) (p r : Poly n) ->
+  testEq (Succ n) p r -> (x : Nat) -> eval p x == eval r x
 
 -- Let's prove for constant polynomial (degree at most 0)
 
@@ -237,9 +238,66 @@ kLem (K x) x₁ y = Refl
 kLem (Shift p) x y = kLem p (Succ x) (Succ y)
 kLem (p ⊕ r) x y =
   eval (p ⊕ r) x       =[ Refl ⟩= 
-  eval p x + eval p x  =[ {!_+_ $= kLem p x y =$= kLem r x y!} ⟩=
+  eval p x + eval p x  =[ _+_ $= kLem p x y =$= kLem p x y ⟩=  -- mistake in paper
   eval p y + eval p y  =⟨ Refl ]=
   eval (p ⊕ r) y ∎
   
-kLem (Times p p₁ x) x₁ y = {!!}
+kLem (Times p r ZeSu) x y =
+  eval (p ⊗ r) x          =[ Refl ⟩=
+  eval p x × eval r x     =[ _×_ $= kLem p x y =$= kLem r x y ⟩=
+  eval p y × eval r y     =[ Refl ⟩=
+  eval (p ⊗ r) y          ∎
+kLem (Times p r SuZe) x y =
+  eval (p ⊗ r) x          =[ Refl ⟩=
+  eval p x × eval r x     =[ _×_ $= kLem p x y =$= kLem r x y ⟩=
+  eval p y × eval r y     =[ Refl ⟩=
+  eval (p ⊗ r) y          ∎
 
+
+-- PROVING THE TESTING PRINCIPLE
+
+ΔLem : ∀ {n} (p : Poly (Succ n)) x -> eval p (Succ x) == eval p x + eval (Δ p) x
+ΔLem = {!!}
+
+testΔLem : (k : Nat){n : Nat} (p r : Poly (Succ n)) ->
+  testEq (Succ k) p r -> testEq k (Δ p) (Δ r)
+
+testLem Zero p r (q ,, ⟨⟩) x =
+  eval p x =[ kLem p x 0 ⟩=
+  eval p 0 =[ q ⟩=
+  eval r 0 =[ kLem r 0 x ⟩=
+  eval r x ∎
+testLem (Succ k) p r (q0 ,, _) Zero = q0
+testLem (Succ n) p r qs (Succ x) = 
+  eval p (Succ x) =[ ΔLem p x ⟩=
+  eval p x + eval (Δ p) x =[ (_+_)
+                          $= testLem (Succ n) p r qs x
+                         =$= testLem n (Δ p) (Δ r) (testΔLem (Succ n) p r qs) x ⟩=
+  eval r x + eval (Δ r) x =⟨ ΔLem r x ]=
+  eval r (Succ x) ∎
+
++cancel : ∀ w y {x z} -> w == y -> w + x == y + z -> x == z
+
+testΔLem Zero p r qs = ⟨⟩
+testΔLem (Succ k) p r (q0 ,, qs) = +cancel (eval p 0) (eval r 0) q0 (
+     eval p 0 + eval (Δ p) 0 =⟨ ΔLem p 0 ]=
+     eval p 1 =[ fst qs ⟩=
+     eval r 1 =[ ΔLem r 0 ⟩=
+     eval r 0 + eval (Δ r) 0 ∎
+    )
+  ,, testΔLem k (Shift p) (Shift r) qs
+
+NoConf : Nat -> Nat -> Set
+NoConf Zero Zero = Unit
+NoConf Zero (Succ y) = Absurd
+NoConf (Succ x) Zero = Absurd
+NoConf (Succ x) (Succ y) = x == y
+
+noConf : ∀ {x y } -> x == y -> NoConf x y
+noConf {Zero} Refl = ⟨⟩
+noConf {Succ x} Refl = Refl
+
++cancel 0 .0 Refl Refl = Refl
++cancel (Succ w) .(Succ w) Refl q = +cancel w w Refl (noConf q)
+
+-- TODO data Dec and what follows
